@@ -18,7 +18,7 @@ def get_main_dir():
 
 def get_feedlists_dir():
     fd = get_main_dir()
-    feeds_dir = os.path.join(fd, "data/feeds/")
+    feeds_dir = os.path.join(fd, "src/data/feeds/")
     return(feeds_dir)
 
 
