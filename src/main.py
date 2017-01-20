@@ -10,25 +10,24 @@ import os
 import logging
 
 from utils import get_main_dir, load_feedlists
-from scrape_feeds import scrape_feeds
-from mysql_utils import saveNewLinks
+from scrape_feeds import scrapeAndSave
 
 
 def main():
+    # Configure logging
     fd = get_main_dir()
     logpath = os.path.join(fd, 'main_run.log')
-    logging.basicConfig(filename=logpath,level=logging.DEBUG)
+    logging.basicConfig(filename=logpath,
+                        level=logging.DEBUG,
+                        format='%(asctime)s %(message)s',
+                        datefmt='%m/%d/%Y %I:%M:%S %p')
 
-    logging.debug("Retrieving contents...")
+    print("Retrieving contents...")
+    logging.info("Retrieving contents...")
     feeds = load_feedlists()
-    contents = scrape_feeds(feeds)
-    if contents:
-        logging.debug('Total entries retrieved: {}'.format(len(contents)))
-        rns = saveNewLinks(contents)
-        logging.debug('Total new links added: {}'.format(len(rns)))
-    else:
-        logging.debug('No contents found')
-        
+    logging.info('Total feeedss to visit: {}'.format(len(feeds)))
+    rns = scrapeAndSave(feeds, sleep_time=0.5, method='tor')
+    logging.info('Total new links added from all feeds: {}'.format(len(rns)))
         
 if __name__=="__main__":
     main()

@@ -1,4 +1,5 @@
 # Create rssfeed_links table for articles database
+# http://dev.mysql.com/doc/refman/5.7/en/create-table.html
 
 DROP TABLE IF EXISTS rssfeed_links;
 #@ _CREATE_TABLE_

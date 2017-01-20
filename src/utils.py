@@ -9,6 +9,18 @@ Created on Wed Jan 18 20:04:57 2017
 import os
 import pickle
 import xml.etree.ElementTree as ET
+import socks
+from sockshandler import SocksiPyHandler
+from urllib import request
+
+
+    
+def configure_tor_opener():
+    
+    opener = request.build_opener(SocksiPyHandler(socks.SOCKS5,
+                                                  "127.0.0.1",
+                                                  9050))
+    return(opener)
 
 
 def get_main_dir():
