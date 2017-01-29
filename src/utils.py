@@ -36,14 +36,15 @@ def get_feedlists_dir():
 
 def get_feedlists_files():
     feeds_dir = get_feedlists_dir()
-    feeds_files = os.listdir(feeds_dir)
+    feeds_files = [ff for ff in os.listdir(feeds_dir) if ff.endswith(".xml")]
     return(feeds_files)
     
     
 def load_feedlist(feeds_file):
     feeds_file = os.path.join(get_feedlists_dir(), feeds_file)
-    with open(feeds_file, 'rb') as f1:
-        feeds = pickle.load(f1)
+#    with open(feeds_file, 'rb') as f1:
+#        feeds = pickle.load(f1)
+    feeds = feedsFromXML(feeds_file)
     return(feeds)
 
     
@@ -73,6 +74,34 @@ def get_creds(name):
         password = keep.find('password').text
         
     return(username, password)
+
+
+def feedsFromXML(feeds_file):
+    # load the file
+    tree = ET.ElementTree()
+    tree.parse(feeds_file)
+    feeds_list = []
+    feeds = [f for f in tree.find('feeds')]
+    for feed in feeds:
+        feeds_list.append({c.tag : c.text for c in feed.getchildren()})
+    return(feeds_list)
+    
+
+def xmlFromDict(meta, feeds):
+    
+    root = ET.Element('data')
+    mele = ET.SubElement(root, 'meta')
+    for k,v in meta.items():
+        m = ET.SubElement(mele, k)
+        m.text = v
+    fele = ET.SubElement(root, 'feeds')
+    for feed in feeds:
+        f = ET.SubElement(fele, 'feed')
+        for k,v in feed.items():
+            e = ET.SubElement(f, k)
+            e.text = v
+    tree = ET.ElementTree(root)
+    return(tree)
     
     
 if __name__ == "__main__":

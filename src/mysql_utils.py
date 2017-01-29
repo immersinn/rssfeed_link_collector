@@ -7,6 +7,7 @@ Created on Wed Jan 18 21:51:50 2017
 """
 
 import utils
+import logging
 
 import mysql.connector
 from mysql.connector.cursor import MySQLCursor
@@ -28,11 +29,18 @@ def saveNewLinks(links):
     try:
         exists = lambda l: exists_base(cur, l)
         links = [l for l in links if not exists(l)]
+#        logging.info('Total new links found: {}'.format(len(links)))
         row_nbrs = dump_entries(cur, links)
         cnx.commit()
         
     except IntegrityError:
         cnx.rollback()
+        
+    except BaseException as err:
+        err_type = str(type(err))
+        err_msg = str(err.args)
+        logging.error("Error encountered: " + err_type + ': ' + err_msg)
+		
         
     finally:
         cur.close()
