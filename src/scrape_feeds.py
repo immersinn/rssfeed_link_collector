@@ -6,6 +6,8 @@ Created on Wed Jan 18 21:10:56 2017
 @author: immersinn
 """
 
+import os
+import itertools
 from time import mktime, sleep
 from datetime import date, datetime
 import logging
@@ -33,7 +35,9 @@ def process_feed_contents(feed, rss_entry):
             c['rss_link'] = rss_entry['Link']
     else:
         contents = []
-    contents = [{KEY_LOOKUP[key] : c[key] for key in TO_KEEP} for c in contents]
+    keymap = rss_entry.pop('keymap')
+    keymap['rss_link'] = 'rss_link'
+    contents = [{KEY_LOOKUP[key] : c[keymap[key]] for key in TO_KEEP} for c in contents]
     for c in contents:
         c['published'] = datetime.fromtimestamp(mktime(c['published']))
     return(contents)
@@ -64,29 +68,41 @@ def scrape_feeds(rss_feeds, sleep_time = 1):
         sleep(sleep_time)
     return(contents)
 
-    
-def scrapeAndSave(rss_feeds, sleep_time=1, method='basic'):
+
+def scrapeAndSave(feeds, sleep_time=.2, n_openers=4, method='tor', verbose=False):
     
     if method=='tor':
-        opener = configure_tor_opener()
-        ip_addr = opener.open("http://icanhazip.com").read().strip()
+        logging.info("Creating {} Tor openers...".format(n_openers))
+        openers = [configure_tor_opener() for _ in range(n_openers)]
+        ip_addr = openers[0].open("http://icanhazip.com").read().strip()
         logging.info("IP Used: " + str(ip_addr))
-        print(ip_addr)
+        if verbose:
+            print(ip_addr)
     else: 
-        opener = None
+        openers = [None]
+    openers = itertools.cycle(openers)
     
     rns = []
-    for rss_entry in rss_feeds:
-        contents = get_feed_contents(rss_entry, method=method, opener=opener)
-    
-        if contents:
-            logging.info('Total entries retrieved from {}: {}'.format(rss_entry['Link'],
-                                                                      len(contents)))
-            new_rns = saveNewLinks(contents)
-            logging.info('Total new links added: {}'.format(len(new_rns)))
-            rns.extend(new_rns)
-        else:
-            logging.info('No contents found')
+    for ent_id, opener in zip(range(len(feeds)), openers):
+        rss_entry = feeds[ent_id]
+        
+        try:
+            contents = get_feed_contents(rss_entry, method=method, opener=opener)
+            
+            if contents:
+                logging.info('Total entries retrieved from {}: {}'.format(rss_entry['Link'],
+                                                                          len(contents)))
+                new_rns = saveNewLinks(contents)
+                logging.info('Total new links added: {}'.format(len(new_rns)))
+                rns.extend(new_rns)
+            else:
+                logging.info('No contents found')
+        except KeyboardInterrupt:
+            raise KeyboardInterrupt
+        except BaseException as err:
+            err_type = str(type(err))
+            err_msg = str(err.args)
+            logging.error("Feed " + str(rss_entry['Link']) + ": " + err_type + ': ' + err_msg)
         
         sleep(sleep_time)
         

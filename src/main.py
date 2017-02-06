@@ -9,7 +9,7 @@ Created on Wed Jan 18 21:29:36 2017
 import os
 import logging
 
-from utils import get_main_dir, load_feedlists
+from utils import get_main_dir, load_feedlists_data
 from scrape_feeds import scrapeAndSave
 
 
@@ -24,9 +24,9 @@ def main():
 
     print("Retrieving contents...")
     logging.info("Retrieving contents...")
-    feeds = load_feedlists()
+    feeds = load_feedlists_data()
     logging.info('Total feeedss to visit: {}'.format(len(feeds)))
-    rns = scrapeAndSave(feeds, sleep_time=0.5, method='tor')
+    rns = scrapeAndSave(feeds, sleep_time=0.5, method='tor', n_openers=8)
     logging.info('Total new links added from all feeds: {}'.format(len(rns)))
         
 if __name__=="__main__":
