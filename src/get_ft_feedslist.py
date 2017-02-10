@@ -34,8 +34,7 @@ soup = bs(page, 'html.parser')
 link_lists = soup.findAll('div', {'class' : 'linkList'})
 keep_sections = ['Homepages', 
                  'Companies by Sector', 'Companies by Region',
-                 'World', 'Markets', 'Technology', 
-                 'Personal Finance']
+                 'World', 'Markets', 'Technology',]
 link_lists = [ll for ll in link_lists if ll.a.text.strip() in keep_sections]
 
 

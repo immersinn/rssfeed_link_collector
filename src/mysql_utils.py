@@ -6,16 +6,34 @@ Created on Wed Jan 18 21:51:50 2017
 @author: immersinn
 """
 
-import utils
+import time
 import logging
 
+import pandas
 import mysql.connector
 from mysql.connector.cursor import MySQLCursor
 from mysql.connector.errors import IntegrityError
 
+import utils
+
 
 DB = "articles"
 TABLE = "rssfeed_links"
+
+
+def getCnx():
+    u,p = utils.get_creds('MySQL')
+    cnx = mysql.connector.connect(user=u, password=p, database=DB)
+    return(cnx)
+
+
+def getCur(cnx):
+    return(MySQLCursor(cnx))
+
+
+def dfDocsFromCursor(cursor):
+    return(pandas.DataFrame(data = cursor.fetchall(),
+                            columns = cursor.column_names))
 
 
 def saveNewLinks(links):
@@ -73,6 +91,23 @@ def exists_base(cursor, entry):
         return(True)
     else:
         return(False)
+    
+    
+def query_docs_by_datetime(cursor, 
+                           start_dt, end_dt='Now',
+                           fields = ['link', 'title', 'rss_link', 'summary', 'published']):
+    
+    date_query_base = '''SELECT ''' + \
+                      ', '.join(fields) + \
+                      ''' FROM rssfeed_links WHERE published BETWEEN %s AND %s'''
+    
+    if end_dt=='Now':
+        end_dt = time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime())
+        
+    cursor.execute(date_query_base, (start_dt, end_dt))
+    return(dfDocsFromCursor(cursor))
+        
+    
 
         
 if __name__=="__main__":
