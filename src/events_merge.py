@@ -69,9 +69,7 @@ def calcJMSDocScores(doc_word_vecs,
     # Build necessary elements for JM
     doc_lengths = numpy.array(doc_word_vecs.sum(axis=1)
                               ).reshape((doc_word_vecs.shape[0],1))
-#    word_doc_freqs = numpy.array(
-#                                (doc_word_vecs > 0).sum(axis=0) / doc_word_vecs.shape[0]
-#                                ).reshape((doc_word_vecs.shape[1],1))
+    
     word_probs = numpy.array(doc_word_vecs.sum(axis=0) / doc_word_vecs.sum()
                              ).reshape((doc_word_vecs.shape[1],1))
     
@@ -160,11 +158,13 @@ if __name__=="__main__":
     from sklearn.feature_extraction.text import CountVectorizer
     import mysql_utils
     
+    # Query Data
     cnx = mysql_utils.getCnx()
     cur = mysql_utils.getCur(cnx)
     docs = mysql_utils.query_docs_by_datetime(cur, 
                                               start_dt='2017-02-1 00:00:00',
                                               end_dt='2017-02-02 00:00:00')
+    
     # Filter out duplicates?
     unique_entries = []
     titles = set()
@@ -176,11 +176,13 @@ if __name__=="__main__":
     docs = docs.ix[unique_entries]
     docs.index = range(docs.shape[0])
     
-    docs['text_feature'] = [build_text_feature(docs.ix[i]) for i in docs.index]
     
+    # Build the text feature
+    docs['text_feature'] = [build_text_feature(docs.ix[i]) for i in docs.index]
     count_vect = CountVectorizer()
     X_train_counts = count_vect.fit_transform(docs.text_feature)
     
+    # Calculate scores
     doc_doc_scores = calcJMSDocScores(X_train_counts)
     connected_components = findEventCCs(doc_doc_scores, cutoff=0.5)
     

@@ -8,7 +8,7 @@ Created on Wed Jan 18 21:10:56 2017
 
 import os
 import itertools
-from time import mktime, sleep
+from time import mktime, sleep, gmtime
 from datetime import date, datetime
 import logging
 
@@ -35,9 +35,26 @@ def process_feed_contents(feed, rss_entry):
             c['rss_link'] = rss_entry['Link']
     else:
         contents = []
+        
     keymap = rss_entry.pop('keymap')
     keymap['rss_link'] = 'rss_link'
-    contents = [{KEY_LOOKUP[key] : c[keymap[key]] for key in TO_KEEP} for c in contents]
+    
+    new_contents = []
+    for c in contents:
+        nd = {}
+        for key in TO_KEEP:
+            try:
+                nd[KEY_LOOKUP[key]] = c[keymap[key]]
+            except KeyError:
+                if key == 'published_parsed':
+                    nd[KEY_LOOKUP[key]] = gmtime()
+                elif key == 'id':
+                    nd[KEY_LOOKUP[key]] = c[keymap['link']]
+        new_contents.append(nd)
+                    
+#    contents = [{KEY_LOOKUP[key] : c[keymap[key]] for key in TO_KEEP} for c in contents]
+    
+    contents = new_contents
     for c in contents:
         c['published'] = datetime.fromtimestamp(mktime(c['published']))
     return(contents)
