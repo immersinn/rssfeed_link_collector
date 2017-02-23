@@ -11,77 +11,9 @@ import datetime
 import numpy
 from scipy import spatial, sparse
 from sklearn.feature_extraction.text import CountVectorizer
-from bs4 import BeautifulSoup as bs
 
 import mysql_utils
-
-
-nltk_stops = set(
-                   ['i', 'me', 'my', 'myself', 'we', 'our', 'ours', 'ourselves', 'you', 'your', 'yours',
-                    'yourself', 'yourselves', 'he', 'him', 'his', 'himself', 'she', 'her', 'hers',
-                    'herself', 'it', 'its', 'itself', 'they', 'them', 'their', 'theirs', 'themselves',
-                    'what', 'which', 'who', 'whom', 'this', 'that', 'these', 'those', 'am', 'is', 'are',
-                    'was', 'were', 'be', 'been', 'being', 'have', 'has', 'had', 'having', 'do', 'does',
-                    'did', 'doing', 'a', 'an', 'the', 'and', 'but', 'if', 'or', 'because', 'as', 'until',
-                    'while', 'of', 'at', 'by', 'for', 'with', 'about', 'against', 'between', 'into',
-                    'through', 'during', 'before', 'after', 'above', 'below', 'to', 'from', 'up', 'down',
-                    'in', 'out', 'on', 'off', 'over', 'under', 'again', 'further', 'then', 'once', 'here',
-                    'there', 'when', 'where', 'why', 'how', 'all', 'any', 'both', 'each', 'few', 'more',
-                    'most', 'other', 'some', 'such', 'no', 'nor', 'not', 'only', 'own', 'same', 'so',
-                    'than', 'too', 'very', 's', 't', 'can', 'will', 'just', 'don', 'should', 'now']
-)
-
-blog_stops = set(
-                 ['wired', 'physorg', 'ft', 'cnn']
-                 )
-
-
-def filter_unique_docs(docs):
-    # Filter out duplicates?
-    unique_entries = []
-    titles = set()
-    for i in docs.index:
-        if docs.ix[i].title not in titles:
-            unique_entries.append(i)
-            titles.update([docs.ix[i].title])
-    
-    docs = docs.ix[unique_entries]
-    docs.index = range(docs.shape[0])
-    
-    return(docs)
-
-
-
-def extractHTMLText(html_content):
-    return(bs(html_content, 'html.parser').text.strip())
-
-
-def build_text_feature(doc, components = ['title'], 
-                      lower=True, 
-                      remove_stops=True, stops=set(),
-                      html_text=False):
-    """
-    Build simple text feature from RSS doc entries;
-    default uses ONLY the title, which seems to be sufficient
-    for most cases..
-    """
-    
-    if html_text:
-        text_extract = lambda x: extractHTMLText(x)
-    else:
-        text_extract = lambda x: x
-    
-    # Build base feature from components
-    feature = ""
-    for comp in components:
-        feature += ' ' + text_extract(doc[comp])
-        
-    # Other preprocessing steps
-    if lower:
-        feature = feature.lower()
-    if remove_stops:
-        feature = ' '.join([w for w in feature.split() if w not in stops])
-    return(feature)
+import doc_proc
 
 
 
@@ -181,35 +113,6 @@ def compare_entries_v2(docs, cc):
     for node in cc:
         print_doc_stats(node)
         print('\n')
-        
-        
-def get_doc_featurevecs(docs, features=['title', 'summary']):
-    # currently using link as index; fix this shit...
-    
-    stopwords = nltk_stops.copy()
-    stopwords.update(blog_stops)
-    
-    # Prep features
-    if 'summary' in features:
-        html_text = True
-    else:
-        html_text = False
-    ind, feature = zip(*[(docs.ix[i]['link'], 
-                          build_text_feature(docs.ix[i],
-                                             components=features,
-                                             html_text=html_text,
-                                             )) \
-                         for i in docs.index]
-                       )
-    
-    # Create count vec
-    count_vect = CountVectorizer()
-    X_train_counts = count_vect.fit_transform(feature)
-    
-    # Calculate scores
-    doc_doc_scores = calcJMSDocScores(X_train_counts)
-    
-    return(ind, doc_doc_scores)
 
 
 def process_timeslice(docs, 
@@ -221,11 +124,11 @@ def process_timeslice(docs,
     """
     
     # Filter
-    docs = filter_unique_docs(docs)
+    docs = doc_proc.filter_unique_docs(docs)
     
     # Get Feature Similarity Scores
-    docid_t, title_scores = get_doc_featurevecs(docs, features=['title'])
-    docid_s, summary_scores = get_doc_featurevecs(docs)
+    docid_t, title_scores = doc_proc.get_doc_featurevecs(docs, features=['title'])
+    docid_s, summary_scores = doc_proc.get_doc_featurevecs(docs)
     
     # Find where Score is greater than threshold cutoff
     hits_title = numpy.where(title_scores > title_cutoff)
@@ -265,12 +168,12 @@ def process_timeslice_v2(docs,
     out = {}
     
     # Filter
-    docs = filter_unique_docs(docs)
+    docs = doc_proc.filter_unique_docs(docs)
     
     # Get Feature Similarity Scores
     for label in details:
         entry = details[label]
-        docid, scores = get_doc_featurevecs(docs,
+        docid, scores = doc_proc.get_doc_featurevecs(docs,
                                             features=entry['features'])
         hits = numpy.where(scores > entry['cutoff'])
         
@@ -421,11 +324,11 @@ if __name__=="__main__":
                                               end_dt='2017-02-02 00:00:00')
     
     # Filter out duplicates?
-    docs = filter_unique_docs(docs)
+    docs = doc_proc.filter_unique_docs(docs)
     
     
     # Build the text feature
-    docs['text_feature'] = [build_text_feature(docs.ix[i]) for i in docs.index]
+    docs['text_feature'] = [doc_proc.build_text_feature(docs.ix[i]) for i in docs.index]
     count_vect = CountVectorizer()
     X_train_counts = count_vect.fit_transform(docs.text_feature)
     

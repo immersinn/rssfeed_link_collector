@@ -12,7 +12,7 @@ import logging
 import pandas
 import mysql.connector
 from mysql.connector.cursor import MySQLCursor
-from mysql.connector.errors import IntegrityError
+from mysql.connector.errors import IntegrityError, ProgrammingError
 
 import utils
 
@@ -35,6 +35,11 @@ def getCur(cnx):
 def dfDocsFromCursor(cursor):
     return(pandas.DataFrame(data = cursor.fetchall(),
                             columns = cursor.column_names))
+    
+
+def dictDocFromCursor(cursor):
+    return({k : f for f, k in zip(cursor.next(),
+                                  cursor.column_names)})
 
 
 def saveNewLinks(links):

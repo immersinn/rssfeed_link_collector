@@ -1,18 +1,22 @@
 # Create rssfeed_links table for articles database
 # http://dev.mysql.com/doc/refman/5.7/en/create-table.html
 
+DROP TABLE IF EXISTS doc_bows;
 DROP TABLE IF EXISTS words;
+
+
 #@ _CREATE_TABLE_
 CREATE TABLE words
 (
-	id			INT NOT NULL AUTO_INCREMENT,
+	id		INT NOT NULL AUTO_INCREMENT,
 	word		VARCHAR(200) NOT NULL,
-	PRIMARY KEY (id)
+	PRIMARY KEY (id),
+    CONSTRAINT uni_words UNIQUE (word)
 ) ENGINE = InnoDB;
 #@ _CREATE_TABLE_
 
 
-DROP TABLE IF EXISTS doc_bows;
+
 #@ _CREATE_TABLE_
 CREATE TABLE doc_bows
 (
