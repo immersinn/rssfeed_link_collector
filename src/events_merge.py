@@ -6,10 +6,14 @@ Created on Thu Feb  9 22:54:46 2017
 @author: immersinn
 """
 
+import datetime
 
 import numpy
-from scipy import spatial
+from scipy import spatial, sparse
+from sklearn.feature_extraction.text import CountVectorizer
 from bs4 import BeautifulSoup as bs
+
+import mysql_utils
 
 
 nltk_stops = set(
@@ -27,6 +31,24 @@ nltk_stops = set(
                     'than', 'too', 'very', 's', 't', 'can', 'will', 'just', 'don', 'should', 'now']
 )
 
+blog_stops = set(
+                 ['wired', 'physorg', 'ft', 'cnn']
+                 )
+
+
+def filter_unique_docs(docs):
+    # Filter out duplicates?
+    unique_entries = []
+    titles = set()
+    for i in docs.index:
+        if docs.ix[i].title not in titles:
+            unique_entries.append(i)
+            titles.update([docs.ix[i].title])
+    
+    docs = docs.ix[unique_entries]
+    docs.index = range(docs.shape[0])
+    
+    return(docs)
 
 
 
@@ -35,7 +57,8 @@ def extractHTMLText(html_content):
 
 
 def build_text_feature(doc, components = ['title'], 
-                      lower=True, remove_stops=True,
+                      lower=True, 
+                      remove_stops=True, stops=set(),
                       html_text=False):
     """
     Build simple text feature from RSS doc entries;
@@ -57,7 +80,7 @@ def build_text_feature(doc, components = ['title'],
     if lower:
         feature = feature.lower()
     if remove_stops:
-        feature = ' '.join([w for w in feature.split() if w not in nltk_stops])
+        feature = ' '.join([w for w in feature.split() if w not in stops])
     return(feature)
 
 
@@ -65,6 +88,8 @@ def build_text_feature(doc, components = ['title'],
 def calcJMSDocScores(doc_word_vecs, 
                      query_word_vecs = numpy.empty((0,0)),
                      lambda_param=0.1, standarize_scores=True):
+    
+    ## MAYBE UPDATE TO USE SPARSE BY DEFAULT, UNLESS < MAX_SIZE??
     
     # Build necessary elements for JM
     doc_lengths = numpy.array(doc_word_vecs.sum(axis=1)
@@ -96,6 +121,11 @@ def calcJMSDocScores(doc_word_vecs,
 
 
 def findEventCCs(doc_doc_scores, cutoff=0.5):
+    
+    """
+    See "scipy.sparse.cs_graph_components" for potential speedup
+        https://docs.scipy.org/doc/scipy-0.10.0/reference/generated/scipy.sparse.cs_graph_components.html
+    """
     
     # Find where Score is greater than threshold cutoff
     hits = numpy.where(doc_doc_scores > cutoff)
@@ -151,13 +181,238 @@ def compare_entries_v2(docs, cc):
     for node in cc:
         print_doc_stats(node)
         print('\n')
+        
+        
+def get_doc_featurevecs(docs, features=['title', 'summary']):
+    # currently using link as index; fix this shit...
+    
+    stopwords = nltk_stops.copy()
+    stopwords.update(blog_stops)
+    
+    # Prep features
+    if 'summary' in features:
+        html_text = True
+    else:
+        html_text = False
+    ind, feature = zip(*[(docs.ix[i]['link'], 
+                          build_text_feature(docs.ix[i],
+                                             components=features,
+                                             html_text=html_text,
+                                             )) \
+                         for i in docs.index]
+                       )
+    
+    # Create count vec
+    count_vect = CountVectorizer()
+    X_train_counts = count_vect.fit_transform(feature)
+    
+    # Calculate scores
+    doc_doc_scores = calcJMSDocScores(X_train_counts)
+    
+    return(ind, doc_doc_scores)
+
+
+def process_timeslice(docs, 
+                      title_cutoff = 0.5, summary_cutoff = 0.15,
+                      make_symmetric=True):
+    """
+    
+    Leave graph as tuple of lists: (data (ii, jj))
+    """
+    
+    # Filter
+    docs = filter_unique_docs(docs)
+    
+    # Get Feature Similarity Scores
+    docid_t, title_scores = get_doc_featurevecs(docs, features=['title'])
+    docid_s, summary_scores = get_doc_featurevecs(docs)
+    
+    # Find where Score is greater than threshold cutoff
+    hits_title = numpy.where(title_scores > title_cutoff)
+    hits_summary = numpy.where(summary_scores > summary_cutoff)
+    
+    if make_symmetric:
+        hits_title = (numpy.hstack([hits_title[0], hits_title[1]]),
+                      numpy.hstack([hits_title[1], hits_title[0]]))
+        hits_summary = (numpy.hstack([hits_summary[0], hits_summary[1]]),
+                        numpy.hstack([hits_summary[1], hits_summary[0]]))
+                                   
+                
+    
+    # Build slice
+    ij = (numpy.hstack([hits_title[0], hits_summary[0]]),
+          numpy.hstack([hits_title[1], hits_summary[1]]))
+    data = numpy.ones((len(ij[0]),))
+    #time_slice = sparse.coo_matrix((data, ij), shape=summary_scores.shape)
+    
+    return(docid_t, {'ij':ij, 'data':data})
+
+
+def process_timeslice_v2(docs,
+                         details = {'title' : {'features' : ['title'], 
+                                               'cutoff' : 0.5,
+                                               'to_binary' : True, 'make_symmetric' : True},
+                                    'summary' : {'features' : ['title', 'summary'],
+                                                 'cutoff' : 0.1,
+                                                 'to_binary' : False, 
+                                                 'make_symmetric' : True, 'sym_func' : lambda x,y : (x+y)/2}
+                                    }):
+    """
+    
+    Leave graph as tuple of lists: (data (ii, jj))
+    """
+    
+    out = {}
+    
+    # Filter
+    docs = filter_unique_docs(docs)
+    
+    # Get Feature Similarity Scores
+    for label in details:
+        entry = details[label]
+        docid, scores = get_doc_featurevecs(docs,
+                                            features=entry['features'])
+        hits = numpy.where(scores > entry['cutoff'])
+        
+        if entry['to_binary']:
+            if entry['make_symmetric']:
+                hits = (numpy.hstack([hits[0], hits[1]]),
+                        numpy.hstack([hits[1], hits[0]]))
+            data = numpy.ones((len(hits[0])))
+        elif not entry['to_binary']:
+            if entry['make_symmetric']:
+                data, ii, jj = [], [], []
+                for k in range(len(hits[0])):
+                    i = hits[0][k]
+                    j = hits[1][k]
+                    val = entry['sym_func'](scores[i,j], scores[j,i])
+                    data.extend([val, val])
+                    ii.extend([i,j])
+                    jj.extend([j,i])
+                hits = (numpy.array(ii),
+                        numpy.array(jj)
+                       )
+                data = numpy.array(data)
+            else:
+                data = scores(hits[0], hits[1])
+                
+        out[label] = {'doc_ids' : docid,
+                      'tslice' : {
+                                  'vals' : data, 
+                                  'ij' : hits
+                                 }
+                      }
+        
+    return(out)
+
+
+def get_slices(cursor, start_date, n_segments, spacing_hours=6, span_segments=4):
+    
+    # Prelims
+    details ={'summary' : {'features' : ['title', 'summary'],
+                       'cutoff' : 0.1,
+                       'to_binary' : False,
+                       'make_symmetric' : True, 'sym_func' : lambda x,y : (x+y)/2}
+         }
+    
+    # Configure datetimes
+    if len(start_date) == 10:
+        start_date += " 00:00:00"
+        
+    base = datetime.datetime.strptime(start_date, '%Y-%m-%d %H:%M:%S')
+    date_list = [base + datetime.timedelta(hours=x) \
+                 for x in range(0, 
+                                (((n_segments - 1) + span_segments) * spacing_hours) + 1,
+                                spacing_hours)]
+                 
+    # Query data
+    docids = {}
+    tslices = {}
+    for i in range(len(date_list)-span_segments):
+        out_01 = process_timeslice_v2(mysql_utils.query_docs_by_datetime(cursor=cursor,
+                                                                         start_dt=date_list[i],
+                                                                         end_dt=date_list[i + span_segments]),
+                                      details=details)
+        docids[i] = out_01['summary']['doc_ids']
+        tslices[i] = out_01['summary']['tslice']
+        
+    return(docids, tslices)
+
+
+class DocIDMapper():
+    
+    def __init__(self,):
+        self.uids = set()
+    
+    def __len__(self):
+        return(len(self.uids))
+    
+    def _update_ids(self, docids):
+        self.uids.update(set(docids))
+    
+    def fit(self, docids):
+        if type(docids[0]) in [tuple, list]:
+            for dids in docids:
+                self._update_ids(dids)
+        else:
+            self._update_ids(docids)
+            
+        self.lookup = {v : i for i,v in enumerate(self.uids)}
+        self.revlu = {i : v for i,v in enumerate(self.uids)}
+        
+    def transform(self, docids):
+        out = []
+        for did in docids:
+            try:
+                out.append(self.lookup[did])
+            except KeyError:
+                out.append(None)
+        return(out)
+
+
+def merge_slices_simple(docids, tslices, connected_pairs):
+    """
+    "Simple Stack" of the multiple time-slices; that is, just 
+    make one ol' big network from the slices where identical stories
+    are the same node in the network, no multiplex
+    
+    "By default when converting to CSR or CSC format, duplicate (i,j) entries 
+    will be summed together. This facilitates efficient construction of finite 
+    element matrices and the like. (see example)"
+    """
+    
+    # Get the set of unique ids and map docs ids to these
+    idmapper = DocIDMapper()
+    idmapper.fit([v for v in docids.values()])
+    docids = {k : idmapper.transform(val) for k,val in docids.items()}
+    
+    # Find matching entries in the slices
+    s2smap = {}
+    for pair in connected_pairs:
+        temp = []
+        for i,did in enumerate(docids[pair[1]]):
+            try:
+                temp.append((docids[pair[0]].index(did), i))
+            except ValueError:
+                pass
+        s2smap['-'.join([str(p) for p in pair])] = temp
+              
+    # Create the big graph
+    newi = []
+    newj = []
+    newdata = []
+    for k,ts in tslices.items():
+        newi.extend([docids[k][ent] for ent in ts['ij'][0]])
+        newj.extend([docids[k][ent] for ent in ts['ij'][1]])
+        newdata.extend(ts['vals'])
+    bg = sparse.coo_matrix((newdata, (newi, newj)),
+                           shape=(len(idmapper), len(idmapper)))
+    
+    return(bg, idmapper)
 
 
 if __name__=="__main__":
-    
-    from sklearn.feature_extraction.text import CountVectorizer
-    import mysql_utils
-    
+        
     # Query Data
     cnx = mysql_utils.getCnx()
     cur = mysql_utils.getCur(cnx)
@@ -166,15 +421,7 @@ if __name__=="__main__":
                                               end_dt='2017-02-02 00:00:00')
     
     # Filter out duplicates?
-    unique_entries = []
-    titles = set()
-    for i in docs.index:
-        if docs.ix[i].title not in titles:
-            unique_entries.append(i)
-            titles.update([docs.ix[i].title])
-            
-    docs = docs.ix[unique_entries]
-    docs.index = range(docs.shape[0])
+    docs = filter_unique_docs(docs)
     
     
     # Build the text feature

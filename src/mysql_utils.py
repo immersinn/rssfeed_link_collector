@@ -18,7 +18,8 @@ import utils
 
 
 DB = "articles"
-TABLE = "rssfeed_links"
+TABLES = ['rssfeed_links', 'words', 'doc_bows']
+TABLE = TABLES[0]
 
 
 def getCnx():
@@ -105,6 +106,18 @@ def query_docs_by_datetime(cursor,
         end_dt = time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime())
         
     cursor.execute(date_query_base, (start_dt, end_dt))
+    return(dfDocsFromCursor(cursor))
+
+
+def query_docs_details(cursor, doc_ids, 
+                       fields=['link', 'title', 'summary', 'published']):
+    
+    format_strings = ','.join(['%s'] * len(doc_ids))
+    doc_query_base = '''SELECT ''' + \
+                  ', '.join(fields) + \
+                  ''' FROM rssfeed_links WHERE link IN (%s)''' % format_strings
+    
+    cursor.execute(doc_query_base, (doc_ids))
     return(dfDocsFromCursor(cursor))
         
     
