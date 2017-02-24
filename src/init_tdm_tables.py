@@ -100,6 +100,7 @@ class TDMTHandle():
 
 def process_docs(limit=100):
     
+    status = 0
     print("Prepping workspace...")
     # Initialize helper classes
     dd = lambda doc: doc_proc.build_text_feature(doc, 
@@ -115,41 +116,63 @@ def process_docs(limit=100):
     cnx = mysql_utils.getCnx()
     cur = mysql_utils.getCur(cnx)
     
-    print("Querying docs...")
-    if limit > -1:
-        query_text = '''SELECT id, title, summary FROM {} LIMIT {}'''.format(mysql_utils.TABLE, limit)
-    elif limit == -1:
-        query_text = '''SELECT id, title, summary FROM {}'''.format(mysql_utils.TABLE)
-    cur.execute(query_text)
+    try:
     
+        # Get ids for docs that have already been processed
+        distint_doc_query = "SELECT DISTINCT doc_id FROM doc_bows"
+        cur.execute(distint_doc_query)
+        old_dids = set([entry[0] for entry in cur])
+        
+        
+        print("Querying docs...")
+        if limit > -1:
+            query_text = '''SELECT id, title, summary FROM {} LIMIT {}'''.format(mysql_utils.TABLE, limit)
+        elif limit == -1:
+            query_text = '''SELECT id, title, summary FROM {}'''.format(mysql_utils.TABLE)
+        cur.execute(query_text)
+        
+        
+        print("Processing docs...")
+        # Iterate over docs
+        count = 0
+        while True:
+            
+            try:
+                if count % 250 == 0:
+                    print("Processing doc {}".format(count))
+                count += 1
+                
+                doc_dict = mysql_utils.dictDocFromCursor(cur)
+                doc_id = doc_dict['id']
+                
+                if doc_id not in old_dids:
+                    doc = dd(doc_dict)
+                    bow = dp.doc2BOW(doc)
+                    th.insertDocBOW(bow, doc_id)
+                
+            except StopIteration:
+                break
+            
+            except KeyboardInterrupt:
+                raise KeyboardInterrupt
+                
+        status = 1
     
-    print("Processing docs...")
-    # Iterate over docs
-    count = 0
-    while True:
-        
-        try:
-            if count % 250 == 0:
-                print("Processing doc {}".format(count))
-            count += 1
             
-            doc_dict = mysql_utils.dictDocFromCursor(cur)
-            doc_id = doc_dict['id']
-            doc = dd(doc_dict)
-            bow = dp.doc2BOW(doc)
-            th.insertDocBOW(bow, doc_id)
-            
-        except StopIteration:
-            break
-        
-        except KeyboardInterrupt:
-            raise KeyboardInterrupt
-            
-        
-    # Close connection
-    th.cnx.close()
-    cnx.close()
+    finally:
+        # Close connection
+        th.cnx.close()
+        cnx.close()
+        return(status)
         
     
 if __name__ == "__main__":
-    process_docs(limit=-1)
+    status = 0
+    while status < 1:
+        try:
+            status = process_docs(limit=-1)
+        except KeyboardInterrupt:
+            status = 444
+        except (ConnectionRefusedError, ConnectionResetError, ConnectionError):
+            print("Restarting process due to connection error...")
+    print(status)
