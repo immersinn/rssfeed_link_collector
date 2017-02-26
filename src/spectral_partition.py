@@ -59,6 +59,65 @@ def spectralGraphPartition23(A, Bin='bNG', L=1.0, finetune=False):
     return(groups, counts, history)
 
 
+def spectralGraphPartitionSingle(A, Bin='bNG', L=1.0, 
+                                 method='twoway1', n_sections=24):
+    """
+    Single-pass of spectral method using the selected method
+    
+    """
+    
+    
+    # Prep work
+    if Bin == 'bNG':
+        B = lambda v, A, indx: bNG(v, A, indx, L)
+    elif Bin == 'bRandUni':
+        B = lambda v, A, indx: bRandUni(v, A, indx, L)
+    else:
+        err_msg = 'Invalid specification for B function; "bNG" or "bRandUni" only.'
+        raise ValueError(err_msg)
+    A = preprocessA(A)
+    ni = A.shape[0]
+    indx = [i for i  in range(ni)]
+    
+    
+    # Define method lambda function
+    if method=='twoway1':
+        f = lambda vvv:  twoway1(vvv, B, A, indx)
+    elif method=='twoway2':
+        f = lambda vvv:  twoway2(vvv, B, A, indx)
+    elif method=='threeway2':
+        f = lambda vvv:  threeway2(vvv, B, A, indx)
+    elif method=='threewayCoarse':
+        f = lambda vvv:  threewayCoarse(vvv, B, A, indx, n_sections)
+    
+    # Calc and sort eigenvecs, eigenvalues
+    BtoEigs = LinearOperator((ni, ni),
+                             matvec = lambda x: B(x, A, indx),
+                             dtype = numpy.float64)
+    
+    try:
+        if method in ['twoway2', 'threeway2']:
+            vals, vecs = eigsh(BtoEigs, k=3, which='BE')
+            sort_inds = numpy.argsort(-vals)
+            vals = vals[sort_inds]
+            vecs = vecs[:,sort_inds]
+        elif method in ['twoway1']:
+            vals, vecs = eigsh(BtoEigs, k=2, which='LA')
+            sort_inds = numpy.argsort(-vals)
+            vals = vals[sort_inds]
+            vecs = vecs[:,sort_inds]
+            vals = numpy.array([vals[0], vals[1], min(0, vals[1] - 1)])
+    except ArpackNoConvergence:
+        vecs, vals = numpy.array(), numpy.array()
+        
+    
+    # Find clusters 
+    C = f(vecs)
+    M = modularity(C, B, A, indx)
+    
+    return(C, M)
+
+
 def preprocessA(A):
     """
     """
@@ -136,7 +195,8 @@ def mainRecursivePartitioningLoop(A, B):
                                                      B, A, indx)
     
                 # Determine best Score, Grouping
-                best_split_ind = [k for k in temp_Q.keys()][numpy.where(list(temp_Q.values())==max(temp_Q.values()))[0][0]]
+                best_split_ind = [k for k in temp_Q.keys()]\
+                                 [numpy.where(list(temp_Q.values())==max(temp_Q.values()))[0][0]]
                 best_Q = temp_Q[best_split_ind]
                 best_C = temp_C[best_split_ind]
     
@@ -180,8 +240,8 @@ def pol2cart(rho, phi):
 
 def twoway1(vecs, B, A, indx):
     C = vecs[:,0]; C[C>=0] = 0; C[C<0] = 1
-    C = C.astype(int).tolist()
-    return C
+    C = C.astype(int).reshape((A.shape[0],))
+    return(C)
 
 
 def twoway2(vecs, B, A, indx):
@@ -486,6 +546,26 @@ def loadRandom(n=30, cutoff=0.2):
     A[A==2] = 1
     A = A - numpy.diag(A.diagonal())
     return A
+
+
+def spanSpace(n, max_groups):
+    """
+    Randomly assigns nodes to a random number of groups (less than
+    or equal to 'max_groups')
+
+    :type n: int
+    :param n: number of nodes in the graph
+
+    :type max_groups: numeric
+    :param max groups: indicates the maximum number of groups the nodes
+    are to be split into
+    """
+    
+    groups_index = numpy.random.randint(1,
+                                        high=numpy.random.randint(2, max_groups + 1) + 1,
+                                        size=n)
+    groups_index = groups_index.reshape((n,))
+    return(groups_index)
     
 
 def main():

@@ -27,6 +27,10 @@ TABLE = TABLES[0]
 ########################################
 
 
+def ids2ints(id_series):
+    return([int(i) for i in list(id_series)])
+
+
 def getCnx():
     u,p = utils.get_creds('MySQL')
     cnx = mysql.connector.connect(user=u, password=p, database=DB)
@@ -45,15 +49,47 @@ def dfDocsFromCursor(cursor):
 def dictDocFromCursor(cursor):
     return({k : f for f, k in zip(cursor.next(),
                                   cursor.column_names)})
+    
 
+class curWith:
+    
+    def __init__(self, query_text, args_tuple=()):
+        self.qt = query_text
+        self.at = args_tuple
+    
+    def __enter__(self):
+        self.cnx = getCnx()
+        self.cur = getCur(self.cnx)
+        if self.at:
+            self.cur.execute(self.qt, self.at)
+        else:
+            self.cur.execute(self.qt)
+        return(self.cur)
+    
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.cnx.close()
+        
+        
+class curWithReuse:
+    
+    def __init__(self,):
+        pass
+    
+    def __enter__(self,):
+        self.cnx = getCnx()
+        self.cur = getCur(self.cnx)
+        return(self.cur)
+    
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.cnx.close()
+             
 
 def saveNewLinks(links):
     """
     
     """
-    u,p = utils.get_creds('MySQL')
-    cnx = mysql.connector.connect(user=u, password=p, database=DB)
-    cur = MySQLCursor(cnx)
+    cnx = getCnx()
+    cur = getCur(cnx)
     
     try:
         exists = lambda l: exists_base(cur, l)
@@ -109,9 +145,8 @@ def exists_base(cursor, entry):
 ########################################
     
     
-def query_docsByDatetime(cursor, 
-                           start_dt, end_dt='Now',
-                           fields = ['link', 'title', 'rss_link', 'summary', 'published']):
+def query_docsByDatetime(start_dt, end_dt='Now',
+                         fields = ['link', 'title', 'rss_link', 'summary', 'published']):
     
     date_query_base = '''SELECT ''' + \
                       ', '.join(fields) + \
@@ -120,61 +155,74 @@ def query_docsByDatetime(cursor,
     if end_dt=='Now':
         end_dt = time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime())
         
-    cursor.execute(date_query_base, (start_dt, end_dt))
-    return(dfDocsFromCursor(cursor))
+    with curWith(date_query_base, (start_dt, end_dt)) as cur:
+        return(dfDocsFromCursor(cursor))
 
 
-def query_docsDetails(cursor, doc_ids, 
-                       fields=['link', 'title', 'summary', 'published']):
+def query_docsDetails(doc_ids, 
+                      fields=['link', 'title', 'summary', 'published'],
+                      method='id'):
     
+    doc_ids = ids2ints(doc_ids)
     format_strings = ','.join(['%s'] * len(doc_ids))
+    
+    if method=='id':
+        from_clause = ''' FROM rssfeed_links WHERE id IN (%s)''' % format_strings
+    elif method=='link':
+        from_clause = ''' FROM rssfeed_links WHERE link IN (%s)''' % format_strings
+        
     doc_query_base = '''SELECT ''' + \
                   ', '.join(fields) + \
-                  ''' FROM rssfeed_links WHERE link IN (%s)''' % format_strings
+                  from_clause
     
-    cursor.execute(doc_query_base, (doc_ids))
-    return(dfDocsFromCursor(cursor))
+    with curWith(doc_query_base, (doc_ids)) as cur:
+        return(dfDocsFromCursor(cur))
 
 
-def query_backgroundWordInfo(cur, word_ids):
+def query_backgroundWordInfo(word_ids):
+    word_ids = ids2ints(word_ids)
     wids_format = ", ".join([str(wid) for wid in word_ids])
     query = "SELECT * FROM words_info WHERE word_id IN ({})".format(wids_format)
-    cur.execute(query)
-    result = dfDocsFromCursor(cur)
-    return(result)
+    
+    with curWith(query) as cur:
+        return(dfDocsFromCursor(cur))
 
 
-def query_totalEntries(cur, table):
+def query_totalEntries(table):
     if table == "rssfeed_links":
         key = "link"
     query = "SELECT COUNT(DISTINCT {}) FROM {}".format(key, table)
-    cur.execute(query)
-    return(cur.fetchall()[0][0])
+    
+    with curWith(query) as cur:
+        return(cur.fetchall()[0][0])
 
 
-def query_wordIDLookup(cur, words):
+def query_wordIDLookup(words):
     format_strings = ','.join(["%s"] * len(words))
     query = ("SELECT id, word FROM words "
              "WHERE word IN ({})".format(format_strings))
-    cur.execute(query, list(words))
-    cols = cur.column_names
-    word_lookup = [{cols[0] : e[0], cols[1] : e[1]} for e in cur.fetchall()]
-    word_lookup = {e['id'] : e['word'] for e in word_lookup}
-    return(word_lookup)
+    
+    with curWith(query, list(words)) as cur:
+        cols = cur.column_names
+        word_lookup = [{cols[0] : e[0], cols[1] : e[1]} for e in cur.fetchall()]
+        word_lookup = {e['id'] : e['word'] for e in word_lookup}
+        return(word_lookup)
 
 
-def query_idWordLookup(cur, wids):
+def query_idWordLookup(wids):
+    wids = ids2ints(wids)
     format_strings = ','.join(["%s"] * len(wids))
     query = ("SELECT id, word FROM words "
              "WHERE id IN ({})".format(format_strings))
-    cur.execute(query, list(wids))
-    cols = cur.column_names
-    word_lookup = [{cols[0] : e[0], cols[1] : e[1]} for e in cur.fetchall()]
-    word_lookup = {e['id'] : e['word'] for e in word_lookup}
-    return(word_lookup)
+    
+    with curWith(query, list(wids)) as cur:
+        cols = cur.column_names
+        word_lookup = [{cols[0] : e[0], cols[1] : e[1]} for e in cur.fetchall()]
+        word_lookup = {e['id'] : e['word'] for e in word_lookup}
+        return(word_lookup)
 
 
-def query_docsOnWords(cur, words, word_type="id", exclude_docs=set()):
+def query_docsOnWords(words, word_type="id", exclude_docs=set()):
     
     if word_type == "word":
         word_doc_query = ("SELECT doc_bows.doc_id, doc_bows.wcount "
@@ -184,18 +232,20 @@ def query_docsOnWords(cur, words, word_type="id", exclude_docs=set()):
         word_doc_query = ("SELECT doc_bows.doc_id, doc_bows.wcount "
                           "FROM  doc_bows LEFT JOIN words ON (doc_bows.word_id = words.id) "
                           "WHERE words.id = '{}' ")
+        words = ids2ints(words)
 
-    doc_ids = set()
-    word_count_store = []
-    for word in words:
-        cur.execute(word_doc_query.format(word))
-        result = dfDocsFromCursor(cur)
-        result = result[[i not in exclude_docs for i in result['doc_id']]]
-        if result.shape[0] > 0:
-            doc_ids.update(set(result['doc_id']))
-            word_count_store.append({'word' : word,
-                                     'n_docs' : result.shape[0],
-                                     'n_tot' : result['wcount'].sum()})
+    with curWithReuse() as cur:
+        doc_ids = set()
+        word_count_store = []
+        for word in words:
+            cur.execute(word_doc_query.format(word))
+            result = dfDocsFromCursor(cur)
+            result = result[[i not in exclude_docs for i in result['doc_id']]]
+            if result.shape[0] > 0:
+                doc_ids.update(set(result['doc_id']))
+                word_count_store.append({'word' : word,
+                                         'n_docs' : result.shape[0],
+                                         'n_tot' : result['wcount'].sum()})
 
     doc_ids = [int(i) for i in doc_ids]
     word_count_store = pandas.DataFrame(word_count_store)
@@ -203,7 +253,7 @@ def query_docsOnWords(cur, words, word_type="id", exclude_docs=set()):
     return(doc_ids, word_count_store)
 
 
-def query_wordSummaryInfo(cur, words, wtype='id', 
+def query_wordSummaryInfo(words, wtype='id', 
                           exclude_docs=set(), include_docs=set()):
     """
     CREATE TABLE words_info SELECT doc_bows.word_id, 
@@ -248,30 +298,33 @@ def query_wordSummaryInfo(cur, words, wtype='id',
                 where_clause +\
                 "GROUP BY doc_bows.word_id"
             
-    cur.execute(query, (words))
-    result = dfDocsFromCursor(cur)
-    return(result)
+    
+    with curWith(query, (words)) as cur:
+        return(dfDocsFromCursor(cur))
 
 
-def query_docBOW(cur, doc_id, word_list = []):
+def query_docBOW(doc_id, word_list = []):
     query = "SELECT word_id, wcount FROM doc_bows WHERE doc_id = {}".format(doc_id)
-    cur.execute(query)
-    cols = cur.column_names
-    bow = [{cols[0] : e[0], cols[1] : e[1]} for e in cur.fetchall()]
-    if word_list:
-        bow = [e for e in bow if e['word_id'] in word_list]
+    
+    with curWith(query) as cur:
+        cols = cur.column_names
+        bow = [{cols[0] : e[0], cols[1] : e[1]} for e in cur.fetchall()]
+        if word_list:
+            bow = [e for e in bow if e['word_id'] in word_list]
+        bow = {e['word_id'] : e['wcount'] for e in bow}
     return(bow)
 
 
-def query_AllDocWords(cur, doc_ids):
-    doc_ids = list(doc_ids)
+def query_AllDocWords(doc_ids):
+    doc_ids = ids2ints(doc_ids)
     format_strings = ','.join(['%s'] * len(doc_ids))
     query = ("SELECT DISTINCT word_id "
              "FROM doc_bows "
              "WHERE doc_id IN ({})".format(format_strings))
-    cur.execute(query, (doc_ids))
-    words = [e[0] for e in cur.fetchall()]
-    return(words)
+    
+    with curWith(query, (doc_ids)) as cur:
+        words = [e[0] for e in cur.fetchall()]
+        return(words)
         
     
 

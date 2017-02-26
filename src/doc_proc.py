@@ -7,6 +7,9 @@ Created on Wed Feb 22 20:31:42 2017
 """
 
 from bs4 import BeautifulSoup as bs
+from sklearn.feature_extraction.text import CountVectorizer
+
+import metrics
 
 
 nltk_stops = set(
@@ -27,6 +30,9 @@ nltk_stops = set(
 blog_stops = set(
                  ['wired', 'physorg', 'ft', 'cnn']
                  )
+
+all_stops = nltk_stops.copy()
+all_stops.update(blog_stops)
 
 
 def filter_unique_docs(docs):
@@ -101,6 +107,6 @@ def get_doc_featurevecs(docs, features=['title', 'summary']):
     X_train_counts = count_vect.fit_transform(feature)
     
     # Calculate scores
-    doc_doc_scores = calcJMSDocScores(X_train_counts)
+    doc_doc_scores = metrics.calcJMSDocScores(X_train_counts)
     
     return(ind, doc_doc_scores)

@@ -9,47 +9,12 @@ Created on Thu Feb  9 22:54:46 2017
 import datetime
 
 import numpy
-from scipy import spatial, sparse
+from scipy import sparse
 from sklearn.feature_extraction.text import CountVectorizer
 
 import mysql_utils
 import doc_proc
-
-
-
-def calcJMSDocScores(doc_word_vecs, 
-                     query_word_vecs = numpy.empty((0,0)),
-                     lambda_param=0.1, standarize_scores=True):
-    
-    ## MAYBE UPDATE TO USE SPARSE BY DEFAULT, UNLESS < MAX_SIZE??
-    
-    # Build necessary elements for JM
-    doc_lengths = numpy.array(doc_word_vecs.sum(axis=1)
-                              ).reshape((doc_word_vecs.shape[0],1))
-    
-    word_probs = numpy.array(doc_word_vecs.sum(axis=0) / doc_word_vecs.sum()
-                             ).reshape((doc_word_vecs.shape[1],1))
-    
-    weighted_doc_vecs = numpy.log(1 + (1-lambda_param) / lambda_param * \
-                                  doc_word_vecs / \
-                                  numpy.dot(doc_lengths, word_probs.T)
-                                  )
-    
-    
-    # Calculate the scores between queries (docs) and docs
-    if query_word_vecs.shape == (0,0):
-        doc_doc_scores = spatial.distance.cdist(weighted_doc_vecs, 
-                                                weighted_doc_vecs,
-                                                numpy.dot)
-        doc_doc_scores -= numpy.diag(doc_doc_scores.diagonal())
-    else:
-        doc_doc_scores = spatial.distance.cdist(query_word_vecs,
-                                                weighted_doc_vecs,
-                                                numpy.dot)
-    if standarize_scores:
-        doc_doc_scores /= doc_doc_scores.max()
-        
-    return(doc_doc_scores)
+from mappers import DocIDMapper
 
 
 def findEventCCs(doc_doc_scores, cutoff=0.5):
@@ -242,37 +207,6 @@ def get_slices(cursor, start_date, n_segments, spacing_hours=6, span_segments=4)
     return(docids, tslices)
 
 
-class DocIDMapper():
-    
-    def __init__(self,):
-        self.uids = set()
-    
-    def __len__(self):
-        return(len(self.uids))
-    
-    def _update_ids(self, docids):
-        self.uids.update(set(docids))
-    
-    def fit(self, docids):
-        if type(docids[0]) in [tuple, list]:
-            for dids in docids:
-                self._update_ids(dids)
-        else:
-            self._update_ids(docids)
-            
-        self.lookup = {v : i for i,v in enumerate(self.uids)}
-        self.revlu = {i : v for i,v in enumerate(self.uids)}
-        
-    def transform(self, docids):
-        out = []
-        for did in docids:
-            try:
-                out.append(self.lookup[did])
-            except KeyError:
-                out.append(None)
-        return(out)
-
-
 def merge_slices_simple(docids, tslices, connected_pairs):
     """
     "Simple Stack" of the multiple time-slices; that is, just 
@@ -315,6 +249,8 @@ def merge_slices_simple(docids, tslices, connected_pairs):
 
 
 if __name__=="__main__":
+    
+    import metrics
         
     # Query Data
     cnx = mysql_utils.getCnx()
@@ -333,7 +269,7 @@ if __name__=="__main__":
     X_train_counts = count_vect.fit_transform(docs.text_feature)
     
     # Calculate scores
-    doc_doc_scores = calcJMSDocScores(X_train_counts)
+    doc_doc_scores = metrics.calcJMSDocScores(X_train_counts)
     connected_components = findEventCCs(doc_doc_scores, cutoff=0.5)
     
     for cc in connected_components:
