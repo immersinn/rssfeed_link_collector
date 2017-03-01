@@ -156,14 +156,15 @@ def query_docsByDatetime(start_dt, end_dt='Now',
         end_dt = time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime())
         
     with curWith(date_query_base, (start_dt, end_dt)) as cur:
-        return(dfDocsFromCursor(cursor))
+        return(dfDocsFromCursor(cur))
 
 
 def query_docsDetails(doc_ids, 
                       fields=['link', 'title', 'summary', 'published'],
                       method='id'):
     
-    doc_ids = ids2ints(doc_ids)
+    if method=='id':
+        doc_ids = ids2ints(doc_ids)
     format_strings = ','.join(['%s'] * len(doc_ids))
     
     if method=='id':

@@ -18,7 +18,7 @@ def ids2ints(id_series):
 def get_localWordsAndDocs(doc,
                           l01_ndoc_cutoff=100,
                           l02_restrict={'n_docs_bg': {
-                                                      'max' : 50
+                                                      'max' : 30
                                                       },
                                         'n_docs_qw' : {
                                                        'min' : 3
@@ -39,7 +39,7 @@ def get_localWordsAndDocs(doc,
                                                  html_text=True,
                                                  )
     dp = init_tdm_tables.DocProcessor()
-    stops = doc_proc.nltk_stops
+    stops = doc_proc.all_stops
     stops_lookup = mysql_utils.query_wordIDLookup(stops)
     n_docs_tot = mysql_utils.query_totalEntries('rssfeed_links')
     
@@ -48,10 +48,11 @@ def get_localWordsAndDocs(doc,
     if verbose:
         print('Starting Level 0...')
     bow = dp.doc2BOW(dd(doc))
-    orig_query_words = [w for w in \
-                       (mysql_utils.query_wordIDLookup([w for w in bow if \
-                                                        w not in doc_proc.nltk_stops])).keys()
-                       ]
+    orig_bow_lookup = {w : i for i,w in mysql_utils.query_wordIDLookup(bow.keys()).items()}
+    bow = {orig_bow_lookup[k] : wcount for k,wcount in bow.items()}
+    orig_query_words = [w for w in bow if w not in stops_lookup.keys()]
+    
+    
     
     
     # Level 1
@@ -79,12 +80,23 @@ def get_localWordsAndDocs(doc,
     
     # Restrict query words based on "words_info" table in mysql
     # Say, more than 5 docs, but less than 100 (50) (20) docs?
-    word_filter_l02 = lambda x: (x['n_docs_qw'] >= 3 and x['n_docs_bg'] < 50 and x['ratio'] > 2)
+    word_filter_l02 = lambda x: (x['n_docs_qw'] >= l02_restrict['n_docs_qw']['min'] \
+                                 and x['n_docs_bg'] < l02_restrict['n_docs_bg']['max'] \
+                                 and x['ratio'] > l02_restrict['ratio'])
     qw_l02 = ids2ints(wi.word_id_bg[wi.apply(lambda entry: word_filter_l02(entry), axis=1)])
     docs_l02, wcs_l02 = mysql_utils.query_docsOnWords(qw_l02,
                                                       word_type="id", 
                                                       exclude_docs=docs_l01)
-
+    
+    
+    # Filter out duplicate docs
+    docs_l01 = mysql_utils.query_docsDetails(docs_l01, fields=['id', 'title'])
+    docs_l01 = doc_proc.filter_unique_docs(docs_l01)
+    docs_l01 = list(docs_l01['id'])
+    
+    docs_l02 = mysql_utils.query_docsDetails(docs_l02, fields=['id', 'title'])
+    docs_l02 = doc_proc.filter_unique_docs(docs_l02)
+    docs_l02 = list(docs_l02['id'])
     
     # Collect info and return data
     if verbose:
@@ -96,8 +108,10 @@ def get_localWordsAndDocs(doc,
     docs = {'orig' : doc,
             'l01' : docs_l01,
             'l02' : docs_l02}
+    word_info = {'l01' : word_count_info,
+                 'l02' : wi}
 
-    return(docs, words, bow)
+    return(docs, words, word_info, bow)
     
 
 
@@ -114,7 +128,7 @@ if __name__=="__main__":
     print('Doc title:')
     print('"""' + doc['title'] + '"""')
     
-    docs, words, orig_bow = get_localWordsAndDocs(doc, verbose=True)
+    docs, words, orig_bow, _ = get_localWordsAndDocs(doc, verbose=True)
     
     # Gen BOWs
     bows = [{'doc_id' : 'orig', 'bow' : orig_bow}]

@@ -7,6 +7,7 @@ Created on Sun Feb 26 08:15:55 2017
 """
 
 import numpy
+import scipy
 from scipy import spatial
 
 
@@ -31,10 +32,12 @@ def calcJMSDocScores(doc_word_vecs,
     
     # Calculate the scores between queries (docs) and docs
     if query_word_vecs.shape == (0,0):
-        doc_doc_scores = spatial.distance.cdist(weighted_doc_vecs, 
+        doc_doc_scores = spatial.distance.cdist(weighted_doc_vecs,
                                                 weighted_doc_vecs,
                                                 numpy.dot)
         doc_doc_scores -= numpy.diag(doc_doc_scores.diagonal())
+    elif query_word_vecs.shape[0] == 1:
+        doc_doc_scores = numpy.dot(query_word_vecs, doc_word_vecs.T)
     else:
         doc_doc_scores = spatial.distance.cdist(query_word_vecs,
                                                 weighted_doc_vecs,
