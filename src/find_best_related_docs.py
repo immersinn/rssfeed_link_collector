@@ -97,7 +97,7 @@ def get_spectral_best(scores_matrix, story_index, id_lookup,
                       graph_edge_cutoff=0.1,):
     
     # Get only connected component
-    scores_matrix = (scores_matrix + scores_matrix.T) / 2
+    ##scores_matrix_2 = (scores_matrix + scores_matrix.T) / 2
     cci = numpy.where(scores_matrix.sum(axis=1) > 0)[0]
     cci_lookup = {i : v for i,v in enumerate(cci)}
     scores_matrix = scores_matrix[cci,:][:, cci]

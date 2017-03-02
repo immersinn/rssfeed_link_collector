@@ -17,6 +17,7 @@ def calcJMSDocScores(doc_word_vecs,
     
     ## MAYBE UPDATE TO USE SPARSE BY DEFAULT, UNLESS < MAX_SIZE??
     
+    
     # Build necessary elements for JM
     doc_lengths = numpy.array(doc_word_vecs.sum(axis=1)
                               ).reshape((doc_word_vecs.shape[0],1))
@@ -37,7 +38,7 @@ def calcJMSDocScores(doc_word_vecs,
                                                 numpy.dot)
         doc_doc_scores -= numpy.diag(doc_doc_scores.diagonal())
     elif query_word_vecs.shape[0] == 1:
-        doc_doc_scores = numpy.dot(query_word_vecs, doc_word_vecs.T)
+        doc_doc_scores = numpy.dot(query_word_vecs, weighted_doc_vecs.T)
     else:
         doc_doc_scores = spatial.distance.cdist(query_word_vecs,
                                                 weighted_doc_vecs,
