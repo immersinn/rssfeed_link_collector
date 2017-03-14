@@ -14,6 +14,10 @@ from bs4 import BeautifulSoup as bs
 # URL Resources
 rss_url = "http://www.ft.com/rss?ft_site=falcon&desktop=true"
 
+BAD_FEEDS = ["http://www.ft.com/rss/management/connected-business",
+             "http://www.ft.com/rss/world/mideast/economy",
+             ]
+
 
 # RSS Entry Keymap
 KEY_MAP = {'title':'title', 'link':'link', 
@@ -48,6 +52,7 @@ for ll in link_lists:
                                  }
                       }
                      for li in ll.findAll('li')])
+feed_list = [fl for fl in feed_list if fl['feed']['Link'] not in BAD_FEEDS]
     
     
 # Store Feeds as XML

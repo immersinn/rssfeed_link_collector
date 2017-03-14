@@ -10,7 +10,7 @@ import utils
 
 
 # RSS Entry Keymap
-KEY_MAP = {'title':'title', 'link':'link', 
+KEY_MAP = {'title':'title', 'link':'id', 
            'published_parsed' : 'published_parsed',
            'summary':'summary', 'id':'id'}
 

@@ -5,12 +5,13 @@ DROP TABLE IF EXISTS rssfeed_links;
 #@ _CREATE_TABLE_
 CREATE TABLE rssfeed_links
 (
-	title		VARCHAR(200) NOT NULL,
-	link		VARCHAR(200) NOT NULL,
-	PRIMARY KEY (link),
+	id			INT NOT NULL AUTO_INCREMENT,
+	title		VARCHAR(300) NOT NULL,
+	link		VARCHAR(300) NOT NULL,
 	published	DATETIME NOT NULL,
-	summary		VARCHAR(2000),
+	summary		VARCHAR(5000),
 	story_id	VARCHAR(50),
-	rss_link	VARCHAR(100) NOT NULL
+	rss_link	VARCHAR(100) NOT NULL,
+	PRIMARY KEY (id),
 ) ENGINE = InnoDB;
 #@ _CREATE_TABLE_

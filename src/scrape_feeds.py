@@ -8,18 +8,21 @@ Created on Wed Jan 18 21:10:56 2017
 
 import os
 import itertools
+import time
 from time import mktime, sleep, gmtime
 from datetime import date, datetime
 import logging
 
 import requests
 import feedparser
+from bs4 import BeautifulSoup as bs
 
 from utils import configure_tor_opener
 from mysql_utils import saveNewLinks
 
 
 TO_KEEP = ['title', 'link', 'published_parsed', 'summary', 'id', 'rss_link']
+#TO_KEEP = ['title', 'link', 'published_parsed', 'summary', 'rss_link']
 KEY_LOOKUP = {'title':'title', 'link':'link', 
               'published_parsed':'published',
               'summary':'summary', 'id':'story_id', 'rss_link':'rss_link'}
@@ -50,6 +53,11 @@ def process_feed_contents(feed, rss_entry):
                     nd[KEY_LOOKUP[key]] = gmtime()
                 elif key == 'id':
                     nd[KEY_LOOKUP[key]] = c[keymap['link']]
+                    
+#        if type(nd['published']) not in [datetime, time.struct_time]:
+#            nd['published'] = gmtime()
+        clean_entry_contents(nd)
+            
         new_contents.append(nd)
                     
 #    contents = [{KEY_LOOKUP[key] : c[keymap[key]] for key in TO_KEEP} for c in contents]
@@ -58,6 +66,29 @@ def process_feed_contents(feed, rss_entry):
     for c in contents:
         c['published'] = datetime.fromtimestamp(mktime(c['published']))
     return(contents)
+
+
+def clean_entry_contents(entry, 
+                         title_cutoff=300, summary_cutoff=5000,
+                         storyid_cutoff=50):
+    
+    # Date issues
+    if type(entry['published']) not in [datetime, time.struct_time]:
+            entry['published'] = gmtime()
+            
+    # Title length
+    if len(entry['title']) >= title_cutoff:
+        entry['title'] = entry['title'][:title_cutoff]
+        
+    # Story ID length
+    if len(entry['story_id']) >= storyid_cutoff:
+        entry['story_id'] = entry['story_id'][:storyid_cutoff]
+        
+    # Summary processing, length
+    ## This will remove any links and such present in the summary data
+    entry['summary'] = bs(entry['summary'], 'html.parser').text
+    if len(entry['summary']) >= summary_cutoff:
+        entry['summary'] = entry['summary'][:summary_cutoff]
               
               
 def get_feed_contents(rss_entry, method='basic', opener=None):

@@ -19,6 +19,7 @@ import graph_plot_utils
 def build_doc_score_info_table(score_matrix, group, story_index, id_lookup, 
                                doc_fields=('id', 'link', 'title', 'summary', 'published')):
     
+    ## UGGH...MAKE THIS ONLY REQUIRE A VECTOR OR JUST THE BOWs TO BE PASSED IN...WTF
     
     # Get the score for the member of "group" from the score_matrix
     scores = [{'id': did, 'score' : score_matrix[story_index,

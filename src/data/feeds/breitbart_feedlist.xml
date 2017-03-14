@@ -1,1 +1,19 @@
-<data><key_map><id>id</id><summary>summary</summary><title>title</title><published_parsed>published_parsed</published_parsed><link>link</link></key_map><feeds><feed><Source>breitbart</Source><Link>http://feeds.feedburner.com/breitbart?format=xml</Link><RssName>All News</RssName></feed></feeds><meta><name>Breitbart</name></meta></data>
+<data>
+	<key_map>
+		<id>id</id>
+		<summary>summary</summary>
+		<title>title</title>
+		<published_parsed>published_parsed</published_parsed>
+		<link>id</link>
+	</key_map>
+	<feeds>
+		<feed>
+			<Source>breitbart</Source>
+			<Link>http://feeds.feedburner.com/breitbart?format=xml</Link>
+			<RssName>All News</RssName>
+		</feed>
+	</feeds>
+	<meta>
+		<name>Breitbart</name>
+	</meta>
+</data>
