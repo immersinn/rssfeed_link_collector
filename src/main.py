@@ -26,7 +26,7 @@ def main():
     logging.info("Retrieving contents...")
     feeds = load_feedlists_data()
     logging.info('Total feeedss to visit: {}'.format(len(feeds)))
-    rns = scrapeAndSave(feeds, sleep_time=0.5, method='tor', n_openers=8)
+    rns = scrapeAndSave(feeds, sleep_time=2, method='basic', n_openers=1)
     logging.info('Total new links added from all feeds: {}'.format(len(rns)))
         
 if __name__=="__main__":
